@@ -2,6 +2,9 @@
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
+#include <DHT.h>
+#define DHTTYPE DHT11
+#define DHTPIN  5
  
 const char* ssid = "valhalla";
 const char* password = "airtightfort1";
@@ -10,11 +13,51 @@ MDNSResponder mdns;
 ESP8266WebServer server(80);
 
 const int led = 13;
-
-void handleRoot() {
+// Initialize DHT sensor 
+// NOTE: For working with a faster than ATmega328p 16 MHz Arduino chip, like an ESP8266,
+// you need to increase the threshold for cycle counts considered a 1 or 0.
+// You can do this by passing a 3rd parameter for this threshold.  It's a bit
+// of fiddling to find the right value, but in general the faster the CPU the
+// higher the value.  The default for a 16mhz AVR is a value of 6.  For an
+// Arduino Due that runs at 84mhz a value of 30 works.
+// This is for the ESP8266 processor on ESP-01 
+DHT dht(DHTPIN, DHTTYPE, 11); // 11 works fine for ESP8266
+ 
+float humidity, temp_f;  // Values read from sensor
+String webString="";     // String to display
+// Generally, you should use "unsigned long" for variables that hold time
+unsigned long previousMillis = 0;        // will store last temp was read
+const long interval = 2000;              // interval at which to read sensor
+ 
+void handle_root() {
   digitalWrite(led, 1);
-  server.send(200, "text/plain", "hello from esp8266!");
+  server.send(200, "text/plain", "Hello from the weather esp8266, read from /temp or /humidity");
+  delay(100);
   digitalWrite(led, 0);
+}
+
+
+void gettemperature() {
+  // Wait at least 2 seconds seconds between measurements.
+  // if the difference between the current time and last time you read
+  // the sensor is bigger than the interval you set, read the sensor
+  // Works better than delay for things happening elsewhere also
+  unsigned long currentMillis = millis();
+ 
+  if(currentMillis - previousMillis >= interval) {
+    // save the last time you read the sensor 
+    previousMillis = currentMillis;   
+ 
+    // Reading temperature for humidity takes about 250 milliseconds!
+    // Sensor readings may also be up to 2 seconds 'old' (it's a very slow sensor)
+    humidity = dht.readHumidity();          // Read humidity (percent)
+    temp_f = dht.readTemperature(true);     // Read temperature as Fahrenheit
+    // Check if any reads failed and exit early (to try again).
+    if (isnan(humidity) || isnan(temp_f)) {
+      Serial.println("Failed to read from DHT sensor!");
+      return;
+    }
+  }
 }
 
 void handleNotFound(){
@@ -56,10 +99,22 @@ void setup(void){
     Serial.println("MDNS responder started");
   }
   
-  server.on("/", handleRoot);
+  server.on("/", handle_root);
   
   server.on("/inline", [](){
     server.send(200, "text/plain", "this works as well");
+  });
+
+  server.on("/temp", [](){  // if you add this subdirectory to your webserver call, you get text below :)
+    gettemperature();       // read sensor
+    webString="Temperature: "+String((int)temp_f)+" F";   // Arduino has a hard time with float to string
+    server.send(200, "text/plain", webString);            // send to someones browser when asked
+  });
+ 
+  server.on("/humidity", [](){  // if you add this subdirectory to your webserver call, you get text below :)
+    gettemperature();           // read sensor
+    webString="Humidity: "+String((int)humidity)+"%";
+    server.send(200, "text/plain", webString);               // send to someones browser when asked
   });
 
   server.onNotFound(handleNotFound);
@@ -71,3 +126,4 @@ void setup(void){
 void loop(void){
   server.handleClient();
 } 
+
