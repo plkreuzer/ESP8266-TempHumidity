@@ -3,11 +3,14 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <DHT.h>
+#include <ESP8266HTTPClient.h>
 #define DHTTYPE DHT11
 #define DHTPIN  5
+
+#define MINUTES_5_IN_MILLI (300000)
  
-const char* ssid = "valhalla";
-const char* password = "airtightfort1";
+const char* ssid = "...";
+const char* password = "...";
 MDNSResponder mdns;
 
 ESP8266WebServer server(80);
@@ -28,6 +31,9 @@ String webString="";     // String to display
 // Generally, you should use "unsigned long" for variables that hold time
 unsigned long previousMillis = 0;        // will store last temp was read
 const long interval = 2000;              // interval at which to read sensor
+String publicKey = "...";
+String privateKey = "...";
+String httpGet = "http://data.sparkfun.com/input/"; //[publicKey]?private_key=[privateKey]&humidity=[value]&temp=[value]
  
 void handle_root() {
   digitalWrite(led, 1);
@@ -122,8 +128,21 @@ void setup(void){
   server.begin();
   Serial.println("HTTP server started");
 }
+
+void sendupdate() {
+  gettemperature();
+  HTTPClient http;
+  //[publicKey]?private_key=[privateKey]&humidity=[value]&temp=[value]
+  String updates = "/input/"+publicKey+"?private_key="+privateKey+"&humidity="+String((int)humidity)+"&temp="+String((int)temp_f);
+  Serial.println("Sending update to: \"http://data.sparkfun.com" + updates);
+  http.begin("data.sparkfun.com", 80, updates);
+  int code = http.GET();
+  Serial.println("HTTP Return Code = " + String(code));
+}
  
 void loop(void){
-  server.handleClient();
+  //server.handleClient();
+  sendupdate();
+  delay(MINUTES_5_IN_MILLI);
 } 
 
